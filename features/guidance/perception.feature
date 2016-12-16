@@ -13,23 +13,28 @@ Feature: Simple Turns
               ^
              / \
             c   d
-                |\
-                | e
-                |
-                f
+            |   |\
+            |   | e
+            |   |
+            |   |
+            |   |
+            |   |
+            |   |
+            |   |
+            g   f
             """
 
         And the ways
             | nodes | name | highway | oneway |
             | ab    | road | primary | no     |
-            | bc    | road | primary | yes    |
+            | bcg   | road | primary | yes    |
             | fdb   | road | primary | yes    |
-            | de    | turn | primary | no     |
+            | ed    | turn | primary | yes    |
 
         When I route I should get
-            | waypoints | turns                           | route          |
-            | f,a       | depart,arrive                   | road,road      |
-            | e,a       | depart,turn slight right,arrive | turn,road,road |
+            | waypoints | turns                           | route          | intersections                                |
+            | f,a       | depart,arrive                   | road,road      | true:0,true:0 false:150 false:180;true:180   |
+            | e,a       | depart,turn slight right,arrive | turn,road,road | true:333;true:0 false:150 false:180;true:180 |
 
     Scenario: Turning into splitting road
         Given the node map
@@ -39,16 +44,22 @@ Feature: Simple Turns
               /\
              /  \
             c   d
-                |\
-                | e
-                |
-                f
+            |   |\
+            |   | e
+            |   |
+            |   |
+            |   |
+            |   |
+            |   |
+            |   |
+            |   |
+            h   f
         """
 
         And the ways
             | nodes | name | highway | oneway |
             | ab    | road | primary | no     |
-            | bc    | road | primary | yes    |
+            | bch   | road | primary | yes    |
             | fdb   | road | primary | yes    |
             | de    | turn | primary | no     |
             | bg    | left | primary | yes    |
@@ -65,16 +76,16 @@ Feature: Simple Turns
         Given the node map
             """
               a
-
+              |
               b
             c   h
-
-
-
-
+            |   |
+            |   |
+            |   |
+            |   |
             d   g
               e
-
+              |
               f
             """
 
@@ -195,8 +206,8 @@ Feature: Simple Turns
     Scenario: Traffic Circle
         Given the node map
             """
-            a - - - - b - .    e     . - c - - - - d
-                        \     '    '   /
+            a - - - - b - - -  e  - - - c - - - - d
+                        \              /
                             \      /
                                f
                                |
@@ -214,8 +225,8 @@ Feature: Simple Turns
 
         When I route I should get
             | waypoints | route                           | intersections                                                                                       |
-            | a,d       | left,circle,circle,right,right  | true:90;false:105 true:135 false:270;true:60 true:180 false:315;true:90 false:240 true:255;true:270 |
-            | g,d       | bottom,circle,right,right       | true:0;true:60 false:180 false:315;true:90 false:240 true:255;true:270                              |
+            | a,d       | left,circle,circle,right,right  | true:90;false:90 true:120 false:270;true:60 true:180 false:300;true:90 false:240 true:270;true:270  |
+            | g,d       | bottom,circle,right,right       | true:0;true:60 false:180 false:300;true:90 false:240 true:270;true:270                              |
 
 
     Scenario: Traffic Island
@@ -252,16 +263,21 @@ Feature: Simple Turns
 
         And the ways
             | nodes | name | oneway |
-            | abcd  | road | yes    |
+            | ab    | road | yes    |
+            | bcd   | road | yes    |
             | efgh  | road | yes    |
             | fb    | road | yes    |
             | bi    | turn | yes    |
 
+        And the relations
+            | type        | way:from | way:to | node:via | restriction  |
+            | restriction | fb       | bcd    | b        | no_left_turn |
+
         When I route I should get
-            | waypoints | route          | intersections                                                                  |
-            | a,d       | road,road      | true:90,false:60 true:90 true:180 false:270;true:270                           |
-            | e,h       | road,road      | true:270,false:90 true:240 true:270;true:90                                    |
-            | e,i       | road,turn,turn | true:270;false:90 true:240 true:270,false:60 true:90 true:180 false:270;true:0 |
+            | waypoints | route          | turns                   | intersections                                                                   |
+            | a,d       | road,road      | depart,arrive           | true:90,false:60 true:90 true:180 false:270;true:270                            |
+            | e,h       | road,road      | depart,arrive           | true:270,false:90 true:240 true:270;true:90                                     |
+            | e,i       | road,turn,turn | depart,turn left,arrive | true:270;false:90 true:240 true:270,false:60 false:90 true:180 false:270;true:0 |
 
      @negative
      Scenario: Meeting Turn Roads
@@ -312,10 +328,10 @@ Feature: Simple Turns
             | restriction | xf       | fg     | f        | no_left_turn |
             | restriction | xg       | gb     | g        | no_left_turn |
 
-        # the goal here should be not to mention the intersection in the middle at all
+        # the goal here should be not to mention the intersection in the middle at all and also suppress the segregated parts
         When I route I should get
-            | waypoints | route            | intersections                                                                                              |
-            | a,l       | horiz,vert,vert  | true:90;false:0 true:60 true:90 true:180 false:270, true:0 false:90 false:180 false:240 false:270;true:180 |
-            | a,d       | horiz,horiz      | true:90,false:0 true:60 true:90 true:180 false:270,false:0 true:90 false:180 false:270 true:300;true:270   |
-            | j,h       | vert,horiz,horiz | true:0;true:0 true:90 false:180 false:270 true:300,false:0 false:90 false:120 false:180 true:270;true:90   |
-            | j,l       | vert,vert        | true:0,true:0 true:90 false:180 false:270 true:300,true:0 false:90 false:180 true:240 false:270;true:180   |
+            | waypoints | route            | intersections                                                                                                                                 |
+            | a,l       | horiz,vert,vert  | true:90;false:0 true:60 true:90 true:180 false:270,true:60 true:120 false:240 true:300,true:0 false:90 false:180 false:240 false:270;true:180 |
+            | a,d       | horiz,horiz      | true:90,false:0 true:60 true:90 true:180 false:270,false:0 true:90 false:180 false:270 true:300;true:270                                      |
+            | j,h       | vert,horiz,horiz | true:0;true:0 true:90 false:180 false:270 true:300,true:60 false:120 true:240 true:300,false:0 false:90 false:120 false:180 true:270;true:90  |
+            | j,l       | vert,vert        | true:0,true:0 true:90 false:180 false:270 true:300,true:0 false:90 false:180 true:240 false:270;true:180                                      |

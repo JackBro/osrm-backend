@@ -528,7 +528,7 @@ bool areParallel(const std::vector<Coordinate> &lhs, const std::vector<Coordinat
     const auto slope_rhs = get_slope(null_island, rotated_difference_rhs);
     // the left hand side has a slope of `0` after the rotation. We can check the slope of the right
     // hand side to ensure we only considering slight slopes
-#if 1
+#if 0
     const auto rotated_difference_lhs = rotateCCWAroundZero(difference_lhs,rotation_angle_radians);
     const auto slope_lhs = get_slope(null_island,rotated_difference_lhs);
 

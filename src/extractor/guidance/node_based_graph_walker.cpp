@@ -149,7 +149,7 @@ operator()(const NodeID /*nid*/,
 
     const auto is_valid_choice = !requires_entry || min_element->entry_allowed;
     const auto is_only_choice_with_same_name =
-        intersection.size() == 2 &&
+        count_desired_name <= 2 && // <= in case we come from a bridge
         node_based_graph.GetEdgeData(min_element->eid).name_id == desired_name_id;
     const auto has_valid_angle =
         ((intersection.size() == 2 ||

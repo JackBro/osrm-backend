@@ -352,6 +352,7 @@ IntersectionNormalizer::AdjustBearingsForMergeAtDestination(const NodeID node_at
         // influences the perceived angle.
         if (CanMerge(node_at_next_intersection, next_intersection_along_road, 0, 1))
         {
+            std::cout << "Can Merge Left" << std::endl;
             const auto offset =
                 get_offset(next_intersection_along_road[0], next_intersection_along_road[1]);
 
@@ -359,15 +360,23 @@ IntersectionNormalizer::AdjustBearingsForMergeAtDestination(const NodeID node_at
                 offset,
                 road,
                 intersection[(intersection.size() + index - 1) % intersection.size()]);
+            std::cout << "Offset: " << corrected_offset << std::endl;
             // at the target intersection, we merge to the right, so we need to shift the current
             // angle to the left
-            road.bearing = adjustAngle(road.bearing, -corrected_offset);
+            std::cout << "Adjusting bearing from: " << road.bearing;
+            road.bearing = adjustAngle(road.bearing, corrected_offset);
+            std::cout << " to " << road.bearing << std::endl;
+
+            std::cout << "Next Intersection\n";
+            for( auto road : intersection )
+                std::cout << "\t" << toString(road) << std::endl;
         }
         else if (CanMerge(node_at_next_intersection,
                           next_intersection_along_road,
                           next_intersection_along_road.size() - 1,
                           0))
         {
+            std::cout << "Can Merge Right"  << std::endl;
             const auto offset =
                 get_offset(next_intersection_along_road[0],
                            next_intersection_along_road[next_intersection_along_road.size() - 1]);
@@ -376,7 +385,12 @@ IntersectionNormalizer::AdjustBearingsForMergeAtDestination(const NodeID node_at
                 get_corrected_offset(offset, road, intersection[(index + 1) % intersection.size()]);
             // at the target intersection, we merge to the left, so we need to shift the current
             // angle to the right
-            road.bearing = adjustAngle(road.bearing, corrected_offset);
+            road.bearing = adjustAngle(road.bearing, -corrected_offset);
+        } else 
+        {
+            std::cout << "Cannnot merge any shape:\n";
+            for( auto road : next_intersection_along_road )
+                std::cout << "\t" << toString(road) << "\n";
         }
     }
     return intersection;
