@@ -38,7 +38,8 @@ IntersectionNormalizer::IntersectionNormalizer(
 std::pair<IntersectionShape, std::vector<std::pair<EdgeID, EdgeID>>> IntersectionNormalizer::
 operator()(const NodeID node_at_intersection, IntersectionShape intersection) const
 {
-    const auto intersection_copy = intersection;;
+    const auto intersection_copy = intersection;
+    ;
     auto merged_shape_and_merges =
         MergeSegregatedRoads(node_at_intersection, std::move(intersection));
     if (!merged_shape_and_merges.second.empty())
@@ -70,10 +71,15 @@ bool IntersectionNormalizer::CanMerge(const NodeID intersection_node,
 {
     BOOST_ASSERT(((first_index + 1) % intersection.size()) == second_index);
 
+    // don't merge on degree two, since it's most likely a bollard/traffic light or a round way
+    if (intersection.size() <= 2)
+        return false;
+
     // call wrapper to capture intersection_node and intersection
     const auto mergable = [this, intersection_node, &intersection](const std::size_t left_index,
                                                                    const std::size_t right_index) {
-        return InnerCanMerge(intersection_node, intersection, left_index, right_index);
+        return InnerCanMerge(
+            intersection_node, intersection[left_index], intersection[right_index]);
     };
 
     /*
@@ -84,12 +90,20 @@ bool IntersectionNormalizer::CanMerge(const NodeID intersection_node,
      */
     if (mergable(first_index, second_index))
     {
+        const auto merged_road = MergeRoads(
+            DetermineMergeDirection(intersection[first_index], intersection[second_index]),
+            intersection[first_index],
+            intersection[second_index]);
+
+        // check if the new road could be merged again
         const auto is_distinct_merge =
-            !mergable(second_index, (second_index + 1) % intersection.size()) &&
-            !mergable((first_index + intersection.size() - 1) % intersection.size(), first_index) &&
-            !mergable(second_index,
-                      (first_index + intersection.size() - 1) % intersection.size()) &&
-            !mergable(first_index, (second_index + 1) % intersection.size());
+            !InnerCanMerge(intersection_node,
+                           merged_road,
+                           intersection[(second_index + 1) % intersection.size()]) &&
+            !InnerCanMerge(
+                intersection_node,
+                intersection[(first_index + intersection.size() - 1) % intersection.size()],
+                merged_road);
         return is_distinct_merge;
     }
     else
@@ -99,16 +113,11 @@ bool IntersectionNormalizer::CanMerge(const NodeID intersection_node,
 // Checks for mergability of two ways that represent the same intersection. For further
 // information see interface documentation in header.
 bool IntersectionNormalizer::InnerCanMerge(const NodeID node_at_intersection,
-                                           const IntersectionShape &intersection,
-                                           std::size_t first_index,
-                                           std::size_t second_index) const
+                                           const IntersectionShapeData &lhs,
+                                           const IntersectionShapeData &rhs) const
 {
-    const auto &first_data = node_based_graph.GetEdgeData(intersection[first_index].eid);
-    const auto &second_data = node_based_graph.GetEdgeData(intersection[second_index].eid);
-
-    // don't merge on degree two, since it's most likely a bollard/traffic light or a round way
-    if (intersection.size() <= 2)
-        return false;
+    const auto &first_data = node_based_graph.GetEdgeData(lhs.eid);
+    const auto &second_data = node_based_graph.GetEdgeData(rhs.eid);
 
     // only merge named ids
     if (first_data.name_id == EMPTY_NAMEID || second_data.name_id == EMPTY_NAMEID)
@@ -123,8 +132,58 @@ bool IntersectionNormalizer::InnerCanMerge(const NodeID node_at_intersection,
             second_data.name_id, first_data.name_id, name_table, street_name_suffix_table))
         return false;
 
-    return mergable_road_detector.CanMergeRoad(
-            node_at_intersection, intersection[first_index], intersection[second_index]);
+    return mergable_road_detector.CanMergeRoad(node_at_intersection, lhs, rhs);
+}
+
+std::pair<EdgeID, EdgeID>
+IntersectionNormalizer::DetermineMergeDirection(const IntersectionShapeData &lhs,
+                                                const IntersectionShapeData &rhs) const
+{
+    if (node_based_graph.GetEdgeData(lhs.eid).reversed)
+        return {lhs.eid, rhs.eid};
+    else
+        return {rhs.eid, lhs.eid};
+}
+
+IntersectionShapeData IntersectionNormalizer::MergeRoads(const IntersectionShapeData &into,
+                                                         const IntersectionShapeData &from) const
+{
+    // we only merge small angles. If the difference between both is large, we are looking at a
+    // bearing leading north. Such a bearing cannot be handled via the basic average. In this
+    // case we actually need to shift the bearing by half the difference.
+    const auto aroundZero = [](const double first, const double second) {
+        return (std::max(first, second) - std::min(first, second)) >= 180;
+    };
+
+    // find the angle between two other angles
+    const auto combineAngles = [aroundZero](const double first, const double second) {
+        if (!aroundZero(first, second))
+            return .5 * (first + second);
+        else
+        {
+            const auto offset = angularDeviation(first, second);
+            auto new_angle = std::max(first, second) + .5 * offset;
+            if (new_angle >= 360)
+                return new_angle - 360;
+            return new_angle;
+        }
+    };
+
+    auto result = into;
+    BOOST_ASSERT(!node_based_graph.GetEdgeData(into.eid).reversed);
+    result.bearing = combineAngles(into.bearing, from.bearing);
+    BOOST_ASSERT(0 <= result.bearing && result.bearing < 360.0);
+    return result;
+}
+
+IntersectionShapeData IntersectionNormalizer::MergeRoads(const std::pair<EdgeID, EdgeID> direction,
+                                                         const IntersectionShapeData &lhs,
+                                                         const IntersectionShapeData &rhs) const
+{
+    if (direction.first == lhs.eid)
+        return MergeRoads(rhs, lhs);
+    else
+        return MergeRoads(lhs, rhs);
 }
 
 /*
@@ -158,45 +217,19 @@ IntersectionNormalizer::MergeSegregatedRoads(const NodeID intersection_node,
         return (index + intersection.size() - 1) % intersection.size();
     };
 
-    // we only merge small angles. If the difference between both is large, we are looking at a
-    // bearing leading north. Such a bearing cannot be handled via the basic average. In this
-    // case we actually need to shift the bearing by half the difference.
-    const auto aroundZero = [](const double first, const double second) {
-        return (std::max(first, second) - std::min(first, second)) >= 180;
-    };
-
-    // find the angle between two other angles
-    const auto combineAngles = [aroundZero](const double first, const double second) {
-        if (!aroundZero(first, second))
-            return .5 * (first + second);
-        else
-        {
-            const auto offset = angularDeviation(first, second);
-            auto new_angle = std::max(first, second) + .5 * offset;
-            if (new_angle >= 360)
-                return new_angle - 360;
-            return new_angle;
-        }
-    };
-
     // This map stores for all edges that participated in a merging operation in which edge id they
     // end up in the end. We only store what we have merged into other edges.
     std::vector<std::pair<EdgeID, EdgeID>> merging_map;
+    const auto merge = [this, &merging_map](const IntersectionShapeData &first,
+                                            const IntersectionShapeData &second) {
 
-    const auto merge = [this, combineAngles, &merging_map](const IntersectionShapeData &first,
-                                                           const IntersectionShapeData &second) {
-        IntersectionShapeData result =
-            !node_based_graph.GetEdgeData(first.eid).reversed ? first : second;
-        result.bearing = combineAngles(first.bearing, second.bearing);
-        BOOST_ASSERT(0 <= result.bearing && result.bearing < 360.0);
-        // the other ID
-        const auto merged_from = result.eid == first.eid ? second.eid : first.eid;
+        const auto direction = DetermineMergeDirection(first, second);
         BOOST_ASSERT(
-            std::find_if(merging_map.begin(), merging_map.end(), [merged_from](const auto pair) {
-                return pair.first == merged_from;
+            std::find_if(merging_map.begin(), merging_map.end(), [direction](const auto pair) {
+                return pair.first == direction.first;
             }) == merging_map.end());
-        merging_map.push_back(std::make_pair(merged_from, result.eid));
-        return result;
+        merging_map.push_back(direction);
+        return MergeRoads(direction, first, second);
     };
 
     if (intersection.size() <= 1)
@@ -261,6 +294,9 @@ IntersectionNormalizer::MergeSegregatedRoads(const NodeID intersection_node,
             --index;
         }
     }
+    std::cout << "Merged Intersection\n";
+    for( auto road : intersection )
+        std::cout << "\t" << toString(road) << std::endl;
     return std::make_pair(intersection, merging_map);
 }
 
@@ -368,7 +404,7 @@ IntersectionNormalizer::AdjustBearingsForMergeAtDestination(const NodeID node_at
             std::cout << " to " << road.bearing << std::endl;
 
             std::cout << "Next Intersection\n";
-            for( auto road : intersection )
+            for (auto road : intersection)
                 std::cout << "\t" << toString(road) << std::endl;
         }
         else if (CanMerge(node_at_next_intersection,
@@ -376,7 +412,7 @@ IntersectionNormalizer::AdjustBearingsForMergeAtDestination(const NodeID node_at
                           next_intersection_along_road.size() - 1,
                           0))
         {
-            std::cout << "Can Merge Right"  << std::endl;
+            std::cout << "Can Merge Right" << std::endl;
             const auto offset =
                 get_offset(next_intersection_along_road[0],
                            next_intersection_along_road[next_intersection_along_road.size() - 1]);
@@ -386,10 +422,11 @@ IntersectionNormalizer::AdjustBearingsForMergeAtDestination(const NodeID node_at
             // at the target intersection, we merge to the left, so we need to shift the current
             // angle to the right
             road.bearing = adjustAngle(road.bearing, -corrected_offset);
-        } else 
+        }
+        else
         {
             std::cout << "Cannnot merge any shape:\n";
-            for( auto road : next_intersection_along_road )
+            for (auto road : next_intersection_along_road)
                 std::cout << "\t" << toString(road) << "\n";
         }
     }

@@ -75,9 +75,17 @@ class IntersectionNormalizer
     // A tool called by CanMerge. It checks whether two indices can be merged, not concerned without
     // remaining parts of the intersection.
     bool InnerCanMerge(const NodeID intersection_node,
-                       const IntersectionShape &intersection,
-                       std::size_t first_index,
-                       std::size_t second_index) const;
+                       const IntersectionShapeData &lhs,
+                       const IntersectionShapeData &rhs) const;
+
+    // Perform an Actual Merge
+    std::pair<EdgeID, EdgeID> DetermineMergeDirection(const IntersectionShapeData &lhs,
+                                                      const IntersectionShapeData &rhs) const;
+    IntersectionShapeData MergeRoads(const IntersectionShapeData &destination,
+                                     const IntersectionShapeData &source) const;
+    IntersectionShapeData MergeRoads(const std::pair<EdgeID, EdgeID> direction,
+                                     const IntersectionShapeData &lhs,
+                                     const IntersectionShapeData &rhs) const;
 
     // Merge segregated roads to omit invalid turns in favor of treating segregated roads as
     // one.
