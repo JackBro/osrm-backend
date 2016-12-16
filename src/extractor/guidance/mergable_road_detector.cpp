@@ -69,23 +69,28 @@ bool MergableRoadDetector::CanMergeRoad(const NodeID intersection_node,
     if (road_target(lhs) == intersection_node || road_target(lhs) == intersection_node)
         return false;
 
+    std::cout << "Basic checks" << std::endl;
     // Don't merge turning circles/traffic loops
     if (IsTrafficLoop(intersection_node, lhs) || IsTrafficLoop(intersection_node, rhs))
         return false;
 
+    std::cout << "No Traffic Loop" << std::endl;
     // needs to be checked prior to link roads, since connections can seem like links
     if (ConnectAgain(intersection_node, lhs, rhs))
         return true;
 
     // Don't merge link roads
+    std::cout << "Not connecting again" << std::endl;
     if (IsLinkRoad(intersection_node, lhs) || IsLinkRoad(intersection_node, rhs))
         return false;
 
     // check if we simply split up prior to an intersection
+    std::cout << "Not Link Roads" << std::endl;
     if (IsNarrowTriangle(intersection_node, lhs, rhs))
         return true;
 
     // finally check if two roads describe the direction
+    std::cout << "Not narrow triangle" << std::endl;
     return HaveSameDirection(intersection_node, lhs, rhs);
 }
 
@@ -236,6 +241,7 @@ bool MergableRoadDetector::HaveSameDirection(const NodeID intersection_node,
     std::tie(distance_traversed_to_the_left, coordinates_to_the_left) =
         getCoordinatesAlongWay(lhs.eid, distance_to_extract);
 
+    std::cout << "Distance to the left: " << distance_traversed_to_the_left << std::endl;
     // quit early if the road is not very long
     if (distance_traversed_to_the_left <= 40)
         return false;
@@ -243,6 +249,7 @@ bool MergableRoadDetector::HaveSameDirection(const NodeID intersection_node,
     std::tie(distance_traversed_to_the_right, coordinates_to_the_right) =
         getCoordinatesAlongWay(rhs.eid, distance_to_extract);
 
+    std::cout << "Distance to the left: " << distance_traversed_to_the_right << std::endl;
     if (distance_traversed_to_the_right <= 40)
         return false;
 
@@ -256,8 +263,10 @@ bool MergableRoadDetector::HaveSameDirection(const NodeID intersection_node,
      * restricts a vector to the last two thirds of the length
      */
     const auto prune = [](auto &data_vector) {
+        std::cout << "Reducing " << data_vector.size();
         BOOST_ASSERT(data_vector.size() >= 3);
         data_vector.erase(data_vector.begin(), data_vector.begin() + data_vector.size() / 3);
+        std::cout << " to " << data_vector.size() << std::endl;
     };
 
     prune(coordinates_to_the_left);
@@ -266,6 +275,7 @@ bool MergableRoadDetector::HaveSameDirection(const NodeID intersection_node,
     const auto are_parallel = util::coordinate_calculation::areParallel(coordinates_to_the_left,
                                                                         coordinates_to_the_right);
 
+    std::cout << "Roads are parallel: " << are_parallel << std::endl;
     if (!are_parallel)
         return false;
 
@@ -280,6 +290,7 @@ bool MergableRoadDetector::HaveSameDirection(const NodeID intersection_node,
          std::max<int>(
              1, node_based_graph.GetEdgeData(rhs.eid).road_classification.GetNumberOfLanes())) *
         ASSUMED_LANE_WIDTH;
+    std::cout << "Distance between: " << distance_between_roads << " Combined: " << combined_road_width << std::endl;
     return distance_between_roads <= combined_road_width + 8;
 }
 
