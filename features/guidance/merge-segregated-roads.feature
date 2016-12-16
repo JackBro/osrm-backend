@@ -120,8 +120,8 @@ Feature: Merge Segregated Roads
             | dcb   | merge | yes    |
 
         When I route I should get
-            | waypoints | route          | intersections                                          |
-            | a,e       | in,merge,merge | true:90;false:75 true:90 false:120 false:270;true:270  |
+            | waypoints | route          | intersections                                         |
+            | a,e       | in,merge,merge | true:90;false:60 true:90 false:120 false:270;true:270 |
 
     Scenario: Tripple Merge should not be possible
         Given the node map
@@ -142,7 +142,7 @@ Feature: Merge Segregated Roads
 
         When I route I should get
             | waypoints | route          | intersections                                          |
-            | a,d       | in,merge,merge | true:90;false:75 false:90 true:120 false:270;true:270  |
+            | a,d       | in,merge,merge | true:90;false:60 false:90 true:120 false:270;true:270  |
 
     @negative
     Scenario: Don't accept turn-restrictions
